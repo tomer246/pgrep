@@ -8,10 +8,18 @@ INPUTDIR 		  = ${BASEDIR}/input
 #########
 REGEX 	= ${BASEDIR}/regex.c
 GREP 	= ${BASEDIR}/pgrep.c
-INPUT2     = ${INPUTDIR}/input.txt
-INPUT 		= ${BASEDIR}/input.txt
+INPUT     = ${INPUTDIR}/input.txt
 
 all:
+	clear
+	@echo "****************************"
+	@echo "*                          *"
+	@echo "* compiling pgrep		  *"
+	@echo "*                          *"
+	@echo "****************************"
+	gcc -pthread ${GREP} -o pgrep
+
+regex:
 	clear
 	@echo "****************************"
 	@echo "*                          *"
@@ -24,15 +32,7 @@ all:
 	@echo "* running on input         *"
 	@echo "*                          *"
 	@echo "****************************"
-	./a.out ${INPUT2}
+	./a.out ${INPUT}
 
-grep:
-	clear
-	@echo "****************************"
-	@echo "*                          *"
-	@echo "* compiling pgrep		  *"
-	@echo "*                          *"
-	@echo "****************************"
-	gcc -pthread ${GREP} -o a.out
-	./a.out -f ${INPUT} -p abc
+
 	

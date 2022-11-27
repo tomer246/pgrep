@@ -8,7 +8,6 @@
 #include <sys/types.h>
 #include <fcntl.h>
 
-#include "pgrep.h"
 #include "regex.c"
 
 /*************************************************************
@@ -80,7 +79,7 @@ void getSettings(int argc, char *argv[], Settings *instance) {
 	while (arg_index < argc) {
 		char *arg = argv[arg_index];
 		if (!strcmp(arg, "-i")) {
-			instance->recursive = 1;
+			instance->ignore = 1;
 		} if (!strcmp(arg, "-R")) {
 			instance->isRegex = 1;
 		} else if (!strcmp(arg, "-v")) {

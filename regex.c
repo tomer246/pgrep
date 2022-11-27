@@ -17,14 +17,12 @@ char whitespaces[NUM_WHITESPACES] = {' ', '\n', '\r', '\v', '\f', '\t'};
 
 int fill_nfa(char * regex, int nfa_state, int start_index, int end_index)
 {
-    printf("%d\n", start_index);
     char curr_ch;
     char next_ch;
     int rparen_index;
     int next_state;
     for (int i=start_index; i<=end_index; i++){
         curr_ch = regex[i];
-        printf("%c\n", curr_ch);
 
         next_ch = i<end_index ? regex[i+1] : 'a';
 
@@ -127,21 +125,21 @@ int fill_nfa(char * regex, int nfa_state, int start_index, int end_index)
                         nfa[nfa_state][EPSILON2] = next_state+1;
                         nfa[next_state][EPSILON1] = nfa_state;
                         nfa_state = next_state+1;
-                        i = rparen_index + 2;
+                        i = rparen_index + 1;
                         break;
                     case '?':
                         next_state = fill_nfa(regex, nfa_state+1, i+1, rparen_index-1);
                         nfa[nfa_state][EPSILON1] = nfa_state+1;
                         nfa[nfa_state][EPSILON2] = next_state;
                         nfa_state = next_state;
-                        i = rparen_index + 2;
+                        i = rparen_index + 1;
                         break;
                     case '+':
                         next_state = fill_nfa(regex, nfa_state, i+1, rparen_index-1);
                         nfa[next_state][EPSILON1] = nfa_state;
                         nfa[next_state][EPSILON2] = next_state+1;
                         nfa_state = next_state+1;
-                        i = rparen_index + 2;
+                        i = rparen_index + 1;
                         break;
                     default: // TODO
                         break;
@@ -238,7 +236,6 @@ int run_word(char *word)
     printf("step 0 starts at state: 1\n");
 
     for (int i=0; i<length; i++){
-        printf("%c\n", word[i]);
         is_new_state = (states_reachable[next_state]->index != 0);
         if (is_new_state)
             next_state = (states_reachable[next_state]->index)-1;
@@ -263,7 +260,7 @@ int run_word(char *word)
 
     return is_in_list(next_state, accepting_states);
 }
-
+/*
 int main(int argc, char* argv[]){
     FILE *fptr = fopen(argv[1], "r");
     char buf[MAX_REG_LEN] = {0};
@@ -285,3 +282,4 @@ int main(int argc, char* argv[]){
 
     clean_regex();
 }
+*/
