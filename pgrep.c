@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <fcntl.h>
+#include <ctype.h>
 
 #include "regex.c"
 
@@ -15,8 +16,8 @@
  * ***********************************************************/
 #define KB             1024
 #define MB             (1024*1024)
-#define LINEBUF        (4*KB) 
-#define THREADSNUM     8
+#define LINE_BUFFER        (4*KB) 
+#define NUMTHREADS     8
 #define THRESHOLD      2
 
 typedef int bool;
@@ -43,9 +44,8 @@ typedef struct Task {
 /*************************************************************
  *  GLOBALS
  * ***********************************************************/
-char cwd[PATH_MAX];
 Settings *settings;
-pthread_t threads[THREADSNUM];
+pthread_t threads[NUMTHREADS];
 
 // help option
 void help(char *argv[]) {
@@ -59,8 +59,8 @@ void help(char *argv[]) {
 		puts("    -i    Ignore case		      ignore upper/lower cases when searching the <search term>. can not\n");
 		puts("    						      be used with the -R option (only for raw strings)\n");
 		puts("    -R    Regex pattern	      look for <search term> as a regex pattern instead of a raw string\n");
-		puts("    -v    Search Inversion      Search for every line that does not include the <search term>.\n");
-		puts("    -V    Enable Verbose        The file path to the file will be printed along with the search result.\n");
+		puts("    -v    Search Inversion      search for every line that does not include the <search term>.\n");
+		puts("    -V    Enable Verbose        the file path to the file will be printed along with the search result.\n");
 		puts("    To Be Done: -improve the custom regex patterns.\n");
 		puts("    			  -add the -A option\n");
 		puts("    			  -add an option for a grep in a directory,\n");
@@ -71,23 +71,23 @@ void help(char *argv[]) {
 }
 
 // Gets the settings given by the user
-void getSettings(int argc, char *argv[], Settings *instance) {
+void getSettings(int argc, char *argv[]) {
 	int arg_index = 1;
-	instance->term = NULL;
+	settings->term = NULL;
 	
 	// Sets settings based off of arguments received.
 	while (arg_index < argc) {
 		char *arg = argv[arg_index];
 		if (!strcmp(arg, "-i")) {
-			instance->ignore = 1;
-		} if (!strcmp(arg, "-R")) {
-			instance->isRegex = 1;
+			settings->ignore = 1;
+		} else if (!strcmp(arg, "-R")) {
+			settings->isRegex = 1;
 		} else if (!strcmp(arg, "-v")) {
-			instance->invert = 1;
+			settings->invert = 1;
 		} else if (!strcmp(arg, "-V")) {
-			instance->verbose = 1;
+			settings->verbose = 1;
 		} else if (!strcmp(arg, "-f")) {
-			instance->isFile = 1;
+			settings->isFile = 1;
 			arg_index++;
 			if (arg_index >= argc){
 				puts("ERROR: The path to the file was not given. \"pgrep -h\" for help.");
@@ -98,9 +98,9 @@ void getSettings(int argc, char *argv[], Settings *instance) {
 				puts("ERROR: The path to the file was not given. \"pgrep -h\" for help.");
 				exit(0);
 			}
-			instance->file = arg;
+			settings->file = arg;
 		} else if (!strcmp(arg, "-A")) {
-			instance->extra = 1;
+			settings->extra = 1;
 			arg_index++;
 			if (arg_index >= argc){
 				puts("ERROR: The number of after context lines was not given. \"pgrep -h\" for help.");
@@ -111,26 +111,30 @@ void getSettings(int argc, char *argv[], Settings *instance) {
 				puts("ERROR: The number of after context lines was not given. \"pgrep -h\" for help.");
 				exit(0);
 			}
-			instance->numExtra = atoi(arg); // 0 if invalid number
+			settings->numExtra = atoi(arg); // 0 if invalid number
 		} else {
 			if (arg_index < argc-1) {
 				puts("ERROR: pgrep was called incorrectly. \"pgrep -h\" for command syntax.");
 				exit(0);
 			}
-			instance->term = arg;
+			settings->term = arg;
 		}
 		arg_index++;
 	}
 
 	// Check that the search term has been given.
-	if (instance->term == NULL) {
+	if (settings->term == NULL) {
 		puts("ERROR: Search term not given. \"pgrep -h\" for help.\n");
+		exit(0);
+	}
+	if (settings->ignore && settings->isRegex){
+		puts("ERROR: Can not have both -i and -R flags\n");
 		exit(0);
 	}
 }
 
-void grepFile(Task* file_task){
-	char line[LINEBUF];
+void grep_file(Task* file_task){
+	char line[LINE_BUFFER];
 	int total_size = file_task->end - file_task->start;
 	int size_left  = total_size;
 	FILE *file_ptr;
@@ -143,7 +147,12 @@ void grepFile(Task* file_task){
 		fclose(file_ptr);
 		exit(0);
 	}
-	while(size_left>0 && fgets(line, LINEBUF, file_ptr)){
+	while(size_left>0 && fgets(line, LINE_BUFFER, file_ptr)){
+
+		if (settings->ignore){
+			to_lower(line);
+		}
+
 		if (settings->isRegex){
 			for(int pos=0; pos<strlen(line); pos++){
 				if(run_search(&line[pos])){
@@ -170,35 +179,35 @@ void grepFile(Task* file_task){
 }
 
 
-void grepFileParallel(char *file_name, long size){
+void grep_file_threaded(char *file_name, long size){
 	FILE *file_ptr;
-	Task threads_tasks[THREADSNUM];
-	long thread_block_size = size / THREADSNUM;
-	int pos = 0;
+	Task threads_tasks[NUMTHREADS];
+	long thread_block_size = size / NUMTHREADS;
+	int offset = 0;
 
 	if (!(file_ptr = fopen(file_name, "r"))){
 		printf("Error: Could not open the file: %s", file_name);
 		exit(0);
 	}
 
-	for (int i=0; i<THREADSNUM - 1; i++){
+	for (int i=0; i<NUMTHREADS - 1; i++){
 		threads_tasks[i].file_name = file_name;
-		threads_tasks[i].start     = i * thread_block_size + pos;
+		threads_tasks[i].start     = i * thread_block_size + offset;
 		threads_tasks[i].end 	   = (i+1) * thread_block_size;
 
 		fseek(file_ptr, threads_tasks[i].end, SEEK_SET);
-		for(pos=0; fgetc(file_ptr) != '\n'; pos++);
-		threads_tasks[i].end 	   += pos;
-		pthread_create(&threads[i], NULL, (void *)grepFile, &threads_tasks[i]);
+		for(offset=0; fgetc(file_ptr) != '\n'; offset++);
+		threads_tasks[i].end 	   += offset;
+		pthread_create(&threads[i], NULL, (void *)grep_file, &threads_tasks[i]);
 	}
 
-	threads_tasks[THREADSNUM-1].file_name = file_name;
-	threads_tasks[THREADSNUM-1].start     = (THREADSNUM-1) * thread_block_size + pos;
-	threads_tasks[THREADSNUM-1].end 	  = size-1;
-	pthread_create(&threads[THREADSNUM-1], NULL, (void *)grepFile, &threads_tasks[THREADSNUM-1]);
+	threads_tasks[NUMTHREADS-1].file_name = file_name;
+	threads_tasks[NUMTHREADS-1].start     = (NUMTHREADS-1) * thread_block_size + offset;
+	threads_tasks[NUMTHREADS-1].end 	  = size-1;
+	pthread_create(&threads[NUMTHREADS-1], NULL, (void *)grep_file, &threads_tasks[NUMTHREADS-1]);
 
 	fclose(file_ptr);
-	for (int i=0; i<THREADSNUM; i++){
+	for (int i=0; i<NUMTHREADS; i++){
 		pthread_join(threads[i], NULL);
 	}
 }
@@ -206,8 +215,11 @@ void grepFileParallel(char *file_name, long size){
 int main(int argc, char *argv[]) {
 	settings = (Settings*)malloc(sizeof(Settings));
 	help(argv); // check if the user asks for help
-	getcwd(cwd, PATH_MAX);
-	getSettings(argc, argv, settings);
+	getSettings(argc, argv);
+
+	if (settings->ignore){
+		to_lower(settings->term);
+	}
 
 	if (settings->isFile){
 		struct stat file_info;
@@ -217,7 +229,7 @@ int main(int argc, char *argv[]) {
 			exit(0);
         }
 		if (S_ISDIR(file_info.st_mode)){
-			puts("Error: Recieved a directory instead of file with.\n");
+			puts("Error: Recieved a directory instead of a file.\n");
 			exit(0);
 		}
 
@@ -225,14 +237,14 @@ int main(int argc, char *argv[]) {
 			activate_regex(settings->term);
 
 		if (file_info.st_size > THRESHOLD * MB){
-			grepFileParallel(settings->file, file_info.st_size);
+			grep_file_threaded(settings->file, file_info.st_size);
 		}
 		else{
 			Task *file_task = (Task*)malloc(sizeof(Task));
 			file_task->file_name  = settings->file;
 			file_task->start 	  = 0;
 			file_task->end 		  = file_info.st_size;
-			grepFile(file_task);
+			grep_file(file_task);
 			free(file_task);
             }
         }

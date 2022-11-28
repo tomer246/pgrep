@@ -172,3 +172,9 @@ intlist *intlist_union(intlist* int_list_index1, intlist* int_list_index2){
     free(ptr);
     return int_list_index;
 }
+
+void to_lower(char *line){
+    for (int i=0; i<strlen(line); i++){
+        line[i] = tolower(line[i]);
+    }
+}

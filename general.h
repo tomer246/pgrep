@@ -25,5 +25,8 @@ intlist *uniq(int *array, int length);
 int find_rparen(char* string, int lparen_index);
 // returns the union of two int_list_indexes
 intlist *intlist_union(intlist* int_list_index1, intlist* int_list_index2);
+// string to lowercase
+void to_lower(char *line);
+
 
 #endif // GENERAL
